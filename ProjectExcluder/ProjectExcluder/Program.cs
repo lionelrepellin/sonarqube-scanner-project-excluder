@@ -37,70 +37,35 @@ namespace ProjectExcluder
 
 		private static void FindChildProjects(string filePath)
 		{
-			var di = new DirectoryInfo(filePath);
-			filePath = di.FullName;
+			filePath = new DirectoryInfo(filePath).FullName;
 
-			var document = XDocument.Load(filePath);
 			var baseDirectory = Path.GetDirectoryName(filePath);
+			var document = XDocument.Load(filePath);
+			var itemGroups = FindItemGroupElements(document);
 
-			//Console.WriteLine($"FindChildProjects from: {Path.GetFileName(filePath)}");
+			//Console.WriteLine($"FindChildProjects from: {Path.GetFileName(filePath)}");			
 
-			#region Content elements are empty
-			/*
-			foreach (var itemGroup in document.Root.Elements().Where(e => e.Name.LocalName == "ItemGroup" && !e.HasAttributes && e.HasElements))
+			foreach (var itemGroup in itemGroups)
 			{
-				var contentElements = GetContentElement(itemGroup);
-				if (contentElements.Any())
-				{
-					Console.WriteLine(C($"We have {referenceElements.Count()} Project reference element(s)"));
-
-					foreach(var contentElement in contentElements.Where(c => c.Attribute("Include").Value.Contains(".csproj")))
-					{
-						var childProjectFullPath = Path.Combine(baseDirectory, ExtractProjectFile(contentElement));
-						AddSonarQubeElement(childProjectFullPath);
-						FindChildProjects(childProjectFullPath);
-					}
-				}
-			}
-			*/
-			#endregion
-
-			foreach (var itemGroup in document.Root.Elements().Where(e => e.Name.LocalName == "ItemGroup" && !e.HasAttributes && e.HasElements))
-			{
-				var projectReferenceElements = FindReferenceElement(itemGroup);
-				if (projectReferenceElements.Any())
+				var projectReferences = FindProjectReferenceElements(itemGroup);
+				if (projectReferences.Any())
 				{
 					//Console.WriteLine($"We have {referenceElements.Count()} Project reference included in {Path.GetFileName(filePath)}");
 
-					foreach (var contentElement in projectReferenceElements.Where(c => c.Attribute("Include").Value.Contains(".csproj")))
+					foreach (var projectReference in projectReferences)
 					{
-						var childProjectFullPath = Path.Combine(baseDirectory, GetRelativeProjectFilePath(contentElement));
+						var childProjectPath = new DirectoryInfo(Path.Combine(baseDirectory, projectReference.Attribute("Include").Value)).FullName;
 
-						if (!File.Exists(childProjectFullPath))
-							throw new FileNotFoundException($"Not found: {childProjectFullPath}");
+						if (!File.Exists(childProjectPath))
+							throw new FileNotFoundException($"Not found: {childProjectPath}");
 
-						AddSonarQubeElement(childProjectFullPath);
-						FindChildProjects(childProjectFullPath);
+						AddSonarQubeElement(childProjectPath);
+						FindChildProjects(childProjectPath);
 					}
 				}
-			}
+			};
 		}
-
-		private static string GetRelativeProjectFilePath(XElement content)
-		{
-			return content.Attribute("Include").Value;
-		}
-
-		//private static IEnumerable<XElement> GetContentElement(XElement itemGroup)
-		//{
-		//	return itemGroup.Elements().Where(e => e.Name.LocalName == "Content" && e.HasAttributes).ToList();
-		//}
-
-		private static IEnumerable<XElement> FindReferenceElement(XElement itemGroup)
-		{
-			return itemGroup.Elements().Where(e => e.Name.LocalName == "ProjectReference" && e.HasAttributes).ToList();
-		}
-
+		
 		private static void AddSonarQubeElement(string filePath)
 		{
 			var fileName = Path.GetFileName(filePath);
@@ -109,7 +74,7 @@ namespace ProjectExcluder
 			{
 				var document = XDocument.Load(filePath);
 				var parentNameSpace = document.Root.Name.Namespace;
-				var propertyGroup = document.Root.Elements().Where(e => e.Name.LocalName == "PropertyGroup" && !e.HasAttributes && e.HasElements).FirstOrDefault();
+				var propertyGroup = FindPropertyGroup(document);
 #if DEBUG
 				//Console.WriteLine($"Add SonarQubeExclude attribute to: {fileName}");
 #else
@@ -117,11 +82,31 @@ namespace ProjectExcluder
 #endif
 				_processedFiles.Add(fileName);
 #if DEBUG
-				Console.WriteLine($"Save project file: {fileName}");				
+				Console.WriteLine($"Save project file: {fileName}");
 #else
 				document.Save(filePath);
 #endif
 			}
+		}
+		
+		private static IEnumerable<XElement> FindProjectReferenceElements(XElement itemGroup)
+		{
+			return itemGroup.Elements().Where(e =>
+							e.Name.LocalName == "ProjectReference" &&
+							e.HasAttributes &&
+							e.Attribute("Include") != null &&
+							e.Attribute("Include").Value.Contains(".csproj")
+			).ToList();
+		}
+
+		private static IEnumerable<XElement> FindItemGroupElements(XDocument document)
+		{
+			return document.Root.Elements().Where(e => e.Name.LocalName == "ItemGroup" && !e.HasAttributes && e.HasElements).ToList();
+		}
+
+		private static XElement FindPropertyGroup(XDocument document)
+		{
+			return document.Root.Elements().FirstOrDefault(e => e.Name.LocalName == "PropertyGroup" && !e.HasAttributes && e.HasElements);
 		}
 	}
 }
