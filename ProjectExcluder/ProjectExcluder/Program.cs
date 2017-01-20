@@ -11,13 +11,11 @@ namespace ProjectExcluder
 {
 	class Program
 	{
-		private static int _counter = 0;
 		private static List<string> _processedFiles = new List<string>();
 
 		static void Main(string[] args)
 		{
 			var mainProjectFilePath = string.Empty;
-
 #if DEBUG
 			mainProjectFilePath = @"C:\dvlp\Project\ASPNET4\Report2\Report2.Web\Report2.Web.csproj";
 #else
@@ -26,38 +24,26 @@ namespace ProjectExcluder
 
 			mainProjectFilePath = args[0];
 #endif
-
 			if (!File.Exists(mainProjectFilePath))
-				throw new FileNotFoundException("not found !");
-
-			var document = XDocument.Load(mainProjectFilePath);
+				throw new FileNotFoundException($"Not found: {mainProjectFilePath}");
 
 			FindChildProjects(mainProjectFilePath);
 
+			Console.WriteLine($"The End: {_processedFiles.Count} files have been processed");
 #if DEBUG
-			Console.ForegroundColor = ConsoleColor.Red;
-			Console.WriteLine($"Save main project file: {Path.GetFileName(mainProjectFilePath)}");
-			Console.ForegroundColor = ConsoleColor.Gray;
-#else
-			document.Save(mainProjectFilePath);
-#endif
-			Console.WriteLine("End");
 			Console.Read();
-			//}
-
+#endif
 		}
 
 		private static void FindChildProjects(string filePath)
 		{
-			//counter++;
-
 			var di = new DirectoryInfo(filePath);
 			filePath = di.FullName;
 
 			var document = XDocument.Load(filePath);
 			var baseDirectory = Path.GetDirectoryName(filePath);
 
-			Console.WriteLine($"FindChildProjects from: {Path.GetFileName(filePath)}");
+			//Console.WriteLine($"FindChildProjects from: {Path.GetFileName(filePath)}");
 
 			#region Content elements are empty
 			/*
@@ -81,14 +67,18 @@ namespace ProjectExcluder
 
 			foreach (var itemGroup in document.Root.Elements().Where(e => e.Name.LocalName == "ItemGroup" && !e.HasAttributes && e.HasElements))
 			{
-				var referenceElements = GetReferenceElement(itemGroup);
-				if (referenceElements.Any())
+				var projectReferenceElements = FindReferenceElement(itemGroup);
+				if (projectReferenceElements.Any())
 				{
-					Console.WriteLine($"We have {referenceElements.Count()} Project reference included in {Path.GetFileName(filePath)}");
+					//Console.WriteLine($"We have {referenceElements.Count()} Project reference included in {Path.GetFileName(filePath)}");
 
-					foreach (var contentElement in referenceElements.Where(c => c.Attribute("Include").Value.Contains(".csproj")))
+					foreach (var contentElement in projectReferenceElements.Where(c => c.Attribute("Include").Value.Contains(".csproj")))
 					{
 						var childProjectFullPath = Path.Combine(baseDirectory, GetRelativeProjectFilePath(contentElement));
+
+						if (!File.Exists(childProjectFullPath))
+							throw new FileNotFoundException($"Not found: {childProjectFullPath}");
+
 						AddSonarQubeElement(childProjectFullPath);
 						FindChildProjects(childProjectFullPath);
 					}
@@ -106,7 +96,7 @@ namespace ProjectExcluder
 		//	return itemGroup.Elements().Where(e => e.Name.LocalName == "Content" && e.HasAttributes).ToList();
 		//}
 
-		private static IEnumerable<XElement> GetReferenceElement(XElement itemGroup)
+		private static IEnumerable<XElement> FindReferenceElement(XElement itemGroup)
 		{
 			return itemGroup.Elements().Where(e => e.Name.LocalName == "ProjectReference" && e.HasAttributes).ToList();
 		}
@@ -119,27 +109,17 @@ namespace ProjectExcluder
 			{
 				var document = XDocument.Load(filePath);
 				var parentNameSpace = document.Root.Name.Namespace;
-
 				var propertyGroup = document.Root.Elements().Where(e => e.Name.LocalName == "PropertyGroup" && !e.HasAttributes && e.HasElements).FirstOrDefault();
-
-				//var sonarQubeAttribute = propertyGroup.Elements().SingleOrDefault(p => p.Name.LocalName == "SonarQubeExclude");
-
-				//if (sonarQubeAttribute == null)
-				//{
 #if DEBUG
-				Console.WriteLine($"Add SonarQubeExclude attribute to: {fileName}");
+				//Console.WriteLine($"Add SonarQubeExclude attribute to: {fileName}");
 #else
 				propertyGroup.Add(new XElement(parentNameSpace + "SonarQubeExclude", true));
 #endif
 				_processedFiles.Add(fileName);
-				//}
-
 #if DEBUG
-				Console.ForegroundColor = ConsoleColor.Red;
-				Console.WriteLine($"Save project file: {fileName}");
-				Console.ForegroundColor = ConsoleColor.Gray;
+				Console.WriteLine($"Save project file: {fileName}");				
 #else
-			document.Save(filePath);
+				document.Save(filePath);
 #endif
 			}
 		}
