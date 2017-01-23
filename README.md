@@ -1,6 +1,6 @@
 # Sonarqube Scanner Project Excluder
 
-This executable is useful when you use Sonarqube with Sonaqube Scanner for MSBuild and does not want to scan subprojects included in you main project.
+This executable is useful when you use Sonarqube with Sonaqube Scanner for MSBuild and does not want to scan subprojects included in your main project.
 
 There are two ways to exclude subprojects from the scanner :
 
